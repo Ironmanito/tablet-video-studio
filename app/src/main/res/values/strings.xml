@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Tablet Video Studio</string>
+    <string name="engine_ready">Motor Hardware ARM64 Activo</string>
+    <string name="import_media">Importar de Galería</string>
+    <string name="fullscreen_toggle">Modo Cine</string>
+</resources>

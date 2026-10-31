@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Clapperboard / Video Frame -->
+    <path
+        android:fillColor="#06B6D4"
+        android:pathData="M28,30h52c3.3,0 6,2.7 6,6v36c0,3.3 -2.7,6 -6,6H28c-3.3,0 -6,-2.7 -6,-6V36C22,32.7 24.7,30 28,30z" />
+    <path
+        android:fillColor="#09090B"
+        android:pathData="M26,38h56v36H26z" />
+    <!-- Play Triangle -->
+    <path
+        android:fillColor="#10B981"
+        android:pathData="M46,45l20,11l-20,11z" />
+    <!-- Timeline Track Bars -->
+    <path
+        android:fillColor="#06B6D4"
+        android:pathData="M28,68h24v3H28z" />
+    <path
+        android:fillColor="#F59E0B"
+        android:pathData="M56,68h24v3H56z" />
+</vector>
