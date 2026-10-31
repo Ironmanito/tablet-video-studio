@@ -322,38 +322,10 @@ class LocalStudioServer(private val context: Context) {
 
         // 4. POST /api/media/upload
         if (method == "POST" && path == "/api/media/upload") {
-            val contentLength = headers["content-length"]?.toIntOrNull() ?: 0
+            val contentLength = headers["content-length"]?.toLongOrNull() ?: 0L
             val contentType = headers["content-type"] ?: ""
-            val rawBytes = readFixedBytes(input, contentLength)
 
             var originalName = query["name"] ?: headers["x-file-name"] ?: "upload_${System.currentTimeMillis()}.mp4"
-            var fileBytes: ByteArray? = null
-
-            if (contentType.contains("application/json", true)) {
-                val bodyObj = JSONObject(String(rawBytes, Charsets.UTF_8))
-                originalName = bodyObj.optString("fileName", bodyObj.optString("name", originalName))
-                val b64 = bodyObj.optString("base64Data", bodyObj.optString("data", ""))
-                val cleanB64 = if (b64.contains(",")) b64.substringAfter(",") else b64
-                fileBytes = Base64.decode(cleanB64, Base64.DEFAULT)
-            } else if (contentType.contains("multipart/form-data", true)) {
-                val extracted = extractMultipartFile(rawBytes, contentType)
-                if (extracted != null) {
-                    originalName = extracted.first
-                    fileBytes = extracted.second
-                }
-            } else {
-                fileBytes = rawBytes
-            }
-
-            if (fileBytes == null || fileBytes.isEmpty()) {
-                sendJsonResponse(
-                    output,
-                    "400 Bad Request",
-                    JSONObject().put("error", "Empty file uploaded")
-                )
-                return
-            }
-
             val decodedOrig = try {
                 URLDecoder.decode(originalName, "UTF-8")
             } catch (_: Exception) {
@@ -364,7 +336,46 @@ class LocalStudioServer(private val context: Context) {
             val savedName = "${uniqueId}_$safeBase"
             val savedFile = File(uploadsDir, savedName)
 
-            FileOutputStream(savedFile).use { it.write(fileBytes) }
+            var uploadOk = false
+
+            if (contentType.contains("application/json", true)) {
+                val rawBytes = readFixedBytes(input, contentLength.toInt())
+                val bodyObj = JSONObject(String(rawBytes, Charsets.UTF_8))
+                val jsonName = bodyObj.optString("fileName", bodyObj.optString("name", originalName))
+                val b64 = bodyObj.optString("base64Data", bodyObj.optString("data", ""))
+                val cleanB64 = if (b64.contains(",")) b64.substringAfter(",") else b64
+                val fileBytes = Base64.decode(cleanB64, Base64.DEFAULT)
+                if (fileBytes.isNotEmpty()) {
+                    FileOutputStream(savedFile).use { it.write(fileBytes) }
+                    uploadOk = true
+                }
+            } else if (contentType.contains("multipart/form-data", true)) {
+                val boundaryMatch = Regex("""boundary=(?:"([^"]+)"|([^;]+))""", RegexOption.IGNORE_CASE).find(contentType)
+                val boundary = boundaryMatch?.let { it.groupValues[1].ifEmpty { it.groupValues[2] }.trim() }
+                if (!boundary.isNullOrEmpty()) {
+                    uploadOk = streamMultipartToFile(input, contentLength, boundary, savedFile)
+                } else {
+                    val rawBytes = readFixedBytes(input, contentLength.toInt())
+                    val extracted = extractMultipartFile(rawBytes, contentType)
+                    if (extracted != null && extracted.second.isNotEmpty()) {
+                        FileOutputStream(savedFile).use { it.write(extracted.second) }
+                        uploadOk = true
+                    }
+                }
+            } else {
+                // Streaming directo a disco usando bloques de 64KB (cero acumulación en memoria RAM)
+                uploadOk = streamBodyToFile(input, contentLength, savedFile)
+            }
+
+            if (!uploadOk || !savedFile.exists() || savedFile.length() == 0L) {
+                if (savedFile.exists()) savedFile.delete()
+                sendJsonResponse(
+                    output,
+                    "400 Bad Request",
+                    JSONObject().put("error", "Error recibiendo archivo o archivo vacío")
+                )
+                return
+            }
 
             val itemMeta = MediaProbeUtils.probeMediaFile(savedFile, uniqueId, safeBase)
             mediaMetaMap[savedName] = itemMeta
@@ -752,6 +763,46 @@ class LocalStudioServer(private val context: Context) {
             if (match) return i
         }
         return -1
+    }
+
+    private fun streamBodyToFile(input: InputStream, totalBytes: Long, targetFile: File): Boolean {
+        return try {
+            FileOutputStream(targetFile).use { fos ->
+                val buffer = ByteArray(65536)
+                var remaining = if (totalBytes > 0) totalBytes else Long.MAX_VALUE
+                while (remaining > 0) {
+                    val toRead = min(remaining, buffer.size.toLong()).toInt()
+                    val read = input.read(buffer, 0, toRead)
+                    if (read <= 0) break
+                    fos.write(buffer, 0, read)
+                    if (totalBytes > 0) remaining -= read
+                }
+                fos.flush()
+            }
+            targetFile.length() > 0
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun streamMultipartToFile(
+        input: InputStream,
+        totalBytes: Long,
+        boundary: String,
+        targetFile: File
+    ): Boolean {
+        return try {
+            val rawBytes = readFixedBytes(input, totalBytes.toInt())
+            val extracted = extractMultipartFile(rawBytes, "multipart/form-data; boundary=$boundary")
+            if (extracted != null && extracted.second.isNotEmpty()) {
+                FileOutputStream(targetFile).use { it.write(extracted.second) }
+                true
+            } else {
+                false
+            }
+        } catch (_: Exception) {
+            false
+        }
     }
 
     private fun getMimeType(path: String): String {

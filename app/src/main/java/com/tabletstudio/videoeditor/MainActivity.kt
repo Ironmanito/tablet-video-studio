@@ -195,6 +195,20 @@ class MainActivity : AppCompatActivity() {
                 binding.loadingOverlay.visibility = View.GONE
             }
 
+            override fun onRenderProcessGone(
+                view: WebView?,
+                detail: android.webkit.RenderProcessGoneDetail?
+            ): Boolean {
+                // Previene que la app muera si el renderer web se queda sin memoria o falla
+                Toast.makeText(
+                    this@MainActivity,
+                    "Reiniciando visor multimedia...",
+                    Toast.LENGTH_SHORT
+                ).show()
+                binding.studioWebView.loadUrl(studioServer.baseUrl)
+                return true
+            }
+
             override fun shouldOverrideUrlLoading(
                 view: WebView?,
                 request: WebResourceRequest?
