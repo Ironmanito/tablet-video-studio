@@ -155,8 +155,14 @@ class LocalStudioServer(private val context: Context) {
 
     private fun seedDemoMediaIfEmpty() {
         try {
+            val seedMarker = File(uploadsDir, ".seeded")
+            if (seedMarker.exists()) return
+
             val existing = uploadsDir.listFiles { f -> f.isFile && !f.name.startsWith(".") }
-            if (!existing.isNullOrEmpty()) return
+            if (!existing.isNullOrEmpty()) {
+                seedMarker.createNewFile()
+                return
+            }
 
             val demoFiles = context.assets.list("demo_uploads") ?: return
             for (demoName in demoFiles) {
@@ -171,6 +177,7 @@ class LocalStudioServer(private val context: Context) {
                 mediaMetaMap[demoName] = meta
             }
             saveMetaMap()
+            seedMarker.createNewFile()
         } catch (_: Exception) {
         }
     }
