@@ -7,7 +7,9 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
+import android.os.Looper
 import android.view.View
+import android.view.ViewGroup
 import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
 import android.webkit.ValueCallback
@@ -16,6 +18,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
@@ -37,6 +40,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var studioServer: LocalStudioServer
+    private var activeWebView: WebView? = null
 
     private var fileUploadCallback: ValueCallback<Array<Uri>>? = null
     private var pendingWebPermissionRequest: PermissionRequest? = null
@@ -104,22 +108,40 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        installCrashShield()
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        activeWebView = binding.studioWebView
         studioServer = LocalStudioServer(applicationContext)
         setupNativeTopBar()
-        setupWebView()
+        setupWebView(activeWebView!!)
         setupBackNavigation()
 
         lifecycleScope.launch {
             val port = withContext(Dispatchers.IO) {
                 studioServer.startServer()
             }
-            binding.tvEngineBadge.text = "Motor Hardware MediaCodec ARM64 • Puerto Local $port"
-            binding.studioWebView.loadUrl(studioServer.baseUrl)
+            binding.tvEngineBadge.text = "ARM64 • Puerto $port"
+            activeWebView?.loadUrl(studioServer.baseUrl)
             handleIncomingShareIntent(intent)
+        }
+    }
+
+    private fun installCrashShield() {
+        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            // Si una corrutina o hilo secundario falla (ej. socket cerrado o MediaMetadataRetriever),
+            // evitamos que Android cierre toda la app.
+            if (thread != Looper.getMainLooper().thread) {
+                android.util.Log.e("TabletVideoStudio", "Excepción capturada en hilo secundario ${thread.name}", throwable)
+                try {
+                    System.gc()
+                } catch (_: Throwable) {}
+                return@setDefaultUncaughtExceptionHandler
+            }
+            defaultHandler?.uncaughtException(thread, throwable)
         }
     }
 
@@ -127,6 +149,16 @@ class MainActivity : AppCompatActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleIncomingShareIntent(intent)
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        try {
+            if (level >= TRIM_MEMORY_RUNNING_LOW) {
+                activeWebView?.clearCache(false)
+                System.gc()
+            }
+        } catch (_: Throwable) {}
     }
 
     private fun setupNativeTopBar() {
@@ -166,9 +198,32 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun recreateWebViewSafely() {
+        try {
+            val host = binding.webViewHost
+            activeWebView?.let { old ->
+                try {
+                    host.removeView(old)
+                    old.destroy()
+                } catch (_: Throwable) {}
+            }
+            val freshWebView = WebView(this).apply {
+                layoutParams = FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            }
+            host.addView(freshWebView)
+            activeWebView = freshWebView
+            setupWebView(freshWebView)
+            freshWebView.loadUrl(studioServer.baseUrl)
+        } catch (t: Throwable) {
+            android.util.Log.e("TabletVideoStudio", "Error recreando WebView", t)
+        }
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
-    private fun setupWebView() {
-        val wv = binding.studioWebView
+    private fun setupWebView(wv: WebView) {
         wv.setLayerType(View.LAYER_TYPE_HARDWARE, null)
 
         wv.settings.apply {
@@ -199,13 +254,15 @@ class MainActivity : AppCompatActivity() {
                 view: WebView?,
                 detail: android.webkit.RenderProcessGoneDetail?
             ): Boolean {
-                // Previene que la app muera si el renderer web se queda sin memoria o falla
-                Toast.makeText(
-                    this@MainActivity,
-                    "Reiniciando visor multimedia...",
-                    Toast.LENGTH_SHORT
-                ).show()
-                binding.studioWebView.loadUrl(studioServer.baseUrl)
+                // Recrear la instancia de WebView limpiamente para que la app jamás se cierre
+                runOnUiThread {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Recuperando visor multimedia...",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    recreateWebViewSafely()
+                }
                 return true
             }
 
@@ -285,10 +342,11 @@ class MainActivity : AppCompatActivity() {
     private fun setupBackNavigation() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
+                val wv = activeWebView
                 if (isFullscreenCinema) {
                     setFullscreenCinemaMode(false)
-                } else if (binding.studioWebView.canGoBack()) {
-                    binding.studioWebView.goBack()
+                } else if (wv != null && wv.canGoBack()) {
+                    wv.goBack()
                 } else {
                     isEnabled = false
                     onBackPressedDispatcher.onBackPressed()
@@ -327,13 +385,13 @@ class MainActivity : AppCompatActivity() {
                 count
             }
             if (importedCount > 0) {
-                binding.studioWebView.evaluateJavascript(
+                activeWebView?.evaluateJavascript(
                     "window.dispatchEvent(new CustomEvent('android-media-imported'));",
                     null
                 )
                 Toast.makeText(
                     this@MainActivity,
-                    "✅ $importedCount archivo(s) listos en el panel de Subidas",
+                    "✅ $importedCount archivo(s) listos para usar",
                     Toast.LENGTH_LONG
                 ).show()
             } else {

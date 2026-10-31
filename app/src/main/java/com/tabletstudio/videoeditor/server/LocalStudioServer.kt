@@ -243,9 +243,11 @@ class LocalStudioServer(private val context: Context) {
 
             try {
                 routeHttpRequest(method, pathPart, queryParams, headers, input, output)
-            } catch (e: Exception) {
-                val err = JSONObject().put("error", e.message ?: "Internal Server Error")
-                sendJsonResponse(output, "500 Internal Server Error", err)
+            } catch (e: Throwable) {
+                try {
+                    val err = JSONObject().put("error", e.message ?: "Internal Server Error")
+                    sendJsonResponse(output, "500 Internal Server Error", err)
+                } catch (_: Throwable) {}
             }
         }
     }
@@ -434,7 +436,12 @@ class LocalStudioServer(private val context: Context) {
             renderJobs[jobId] = job
 
             executor.execute {
-                renderer.renderTimelineJob(job, design, options)
+                try {
+                    renderer.renderTimelineJob(job, design, options)
+                } catch (t: Throwable) {
+                    job.status = "FAILED"
+                    job.error = t.message ?: "Error de memoria o hardware durante el renderizado"
+                }
             }
 
             val resp = JSONObject().put("video", job.toVideoJson())

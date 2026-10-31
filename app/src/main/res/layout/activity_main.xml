@@ -6,62 +6,64 @@
     android:background="@color/studio_bg">
 
     <LinearLayout
+        android:id="@+id/mainVerticalLayout"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical">
 
-        <!-- Barra Superior Nativa para Tablet (colapsable en modo cine) -->
+        <!-- Barra Superior Nativa para Tablet (adaptable a vertical y horizontal) -->
         <LinearLayout
             android:id="@+id/nativeTopBar"
             android:layout_width="match_parent"
-            android:layout_height="42dp"
+            android:layout_height="38dp"
             android:background="@color/studio_surface"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp">
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp">
 
             <View
                 android:id="@+id/statusDot"
-                android:layout_width="8dp"
-                android:layout_height="8dp"
+                android:layout_width="7dp"
+                android:layout_height="7dp"
                 android:background="#10B981" />
 
             <TextView
                 android:id="@+id/tvStudioTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:text="TABLET VIDEO STUDIO"
+                android:layout_marginStart="6dp"
+                android:text="VIDEO STUDIO"
                 android:textColor="@color/studio_text"
-                android:textSize="12sp"
+                android:textSize="11sp"
                 android:textStyle="bold" />
 
             <TextView
                 android:id="@+id/tvEngineBadge"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="10dp"
+                android:layout_marginStart="8dp"
                 android:layout_weight="1"
                 android:ellipsize="end"
                 android:singleLine="true"
-                android:text="Motor Hardware MediaCodec ARM64 • Autónomo"
+                android:text="ARM64 Nativo"
                 android:textColor="@color/studio_accent"
-                android:textSize="11sp" />
+                android:textSize="10sp" />
 
             <Button
                 android:id="@+id/btnNativeImport"
                 style="@style/Widget.Material3.Button.TextButton"
                 android:layout_width="wrap_content"
-                android:layout_height="34dp"
+                android:layout_height="32dp"
                 android:insetTop="0dp"
                 android:insetBottom="0dp"
                 android:minHeight="0dp"
-                android:paddingStart="10dp"
+                android:minWidth="0dp"
+                android:paddingStart="7dp"
                 android:paddingTop="2dp"
-                android:paddingEnd="10dp"
+                android:paddingEnd="7dp"
                 android:paddingBottom="2dp"
-                android:text="+ Galería Android"
+                android:text="+ Galería"
                 android:textAllCaps="false"
                 android:textColor="@color/studio_emerald"
                 android:textSize="11sp" />
@@ -70,15 +72,16 @@
                 android:id="@+id/btnExportsFolder"
                 style="@style/Widget.Material3.Button.TextButton"
                 android:layout_width="wrap_content"
-                android:layout_height="34dp"
+                android:layout_height="32dp"
                 android:insetTop="0dp"
                 android:insetBottom="0dp"
                 android:minHeight="0dp"
-                android:paddingStart="10dp"
+                android:minWidth="0dp"
+                android:paddingStart="7dp"
                 android:paddingTop="2dp"
-                android:paddingEnd="10dp"
+                android:paddingEnd="7dp"
                 android:paddingBottom="2dp"
-                android:text="Mis Exportados"
+                android:text="Exportados"
                 android:textAllCaps="false"
                 android:textColor="@color/studio_text"
                 android:textSize="11sp" />
@@ -87,15 +90,16 @@
                 android:id="@+id/btnFullscreen"
                 style="@style/Widget.Material3.Button.TextButton"
                 android:layout_width="wrap_content"
-                android:layout_height="34dp"
+                android:layout_height="32dp"
                 android:insetTop="0dp"
                 android:insetBottom="0dp"
                 android:minHeight="0dp"
-                android:paddingStart="8dp"
+                android:minWidth="0dp"
+                android:paddingStart="7dp"
                 android:paddingTop="2dp"
-                android:paddingEnd="8dp"
+                android:paddingEnd="7dp"
                 android:paddingBottom="2dp"
-                android:text="Pantalla Completa"
+                android:text="Cine"
                 android:textAllCaps="false"
                 android:textColor="@color/studio_muted"
                 android:textSize="11sp" />
@@ -107,13 +111,20 @@
             android:layout_height="1dp"
             android:background="@color/studio_border" />
 
-        <!-- WebView con aceleración por hardware que aloja la suite React Video Studio -->
-        <WebView
-            android:id="@+id/studioWebView"
+        <!-- Contenedor dinámico para WebView (permite recreación segura si el renderer crashea) -->
+        <FrameLayout
+            android:id="@+id/webViewHost"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
-            android:background="@color/studio_bg" />
+            android:background="@color/studio_bg">
+
+            <WebView
+                android:id="@+id/studioWebView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@color/studio_bg" />
+        </FrameLayout>
 
     </LinearLayout>
 
@@ -122,19 +133,19 @@
         android:id="@+id/btnRestoreBar"
         style="@style/Widget.Material3.Button.TonalButton"
         android:layout_width="wrap_content"
-        android:layout_height="32dp"
+        android:layout_height="30dp"
         android:layout_gravity="top|end"
-        android:layout_marginTop="6dp"
-        android:layout_marginEnd="140dp"
-        android:alpha="0.82"
+        android:layout_marginTop="4dp"
+        android:layout_marginEnd="110dp"
+        android:alpha="0.85"
         android:insetTop="0dp"
         android:insetBottom="0dp"
         android:minHeight="0dp"
-        android:paddingStart="10dp"
+        android:paddingStart="8dp"
         android:paddingTop="0dp"
-        android:paddingEnd="10dp"
+        android:paddingEnd="8dp"
         android:paddingBottom="0dp"
-        android:text="Barra Android"
+        android:text="Barra"
         android:textAllCaps="false"
         android:textSize="10sp"
         android:visibility="gone" />
