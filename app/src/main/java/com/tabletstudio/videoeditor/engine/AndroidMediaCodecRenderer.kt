@@ -205,10 +205,11 @@ class AndroidMediaCodecRenderer(
             if (job.outputFile.exists()) {
                 job.outputFile.delete()
             }
-            muxer = MediaMuxer(
+            val activeMuxer = MediaMuxer(
                 job.outputFile.absolutePath,
                 MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4
             )
+            muxer = activeMuxer
 
             val totalFrames = max(1, ((totalDurationMs * fps) / 1000L).toInt())
             val videoBufferInfo = MediaCodec.BufferInfo()
@@ -227,7 +228,7 @@ class AndroidMediaCodecRenderer(
                 isCancelled = { job.cancelled }
             )
             val finalAudioFormat = audioEncoder.outputFormat
-            muxerAudioTrack = muxer.addTrack(finalAudioFormat)
+            muxerAudioTrack = activeMuxer.addTrack(finalAudioFormat)
 
             // 4. Render every video frame on Canvas -> Surface -> H.264 Hardware Encoder
             for (frameIdx in 0 until totalFrames) {
@@ -262,8 +263,8 @@ class AndroidMediaCodecRenderer(
                     fps = fps,
                     onFormatChanged = { fmt ->
                         if (!muxerStarted) {
-                            muxerVideoTrack = muxer.addTrack(fmt)
-                            muxer.start()
+                            muxerVideoTrack = activeMuxer.addTrack(fmt)
+                            activeMuxer.start()
                             muxerStarted = true
                         }
                     },
@@ -271,7 +272,7 @@ class AndroidMediaCodecRenderer(
                         if (muxerStarted && muxerVideoTrack >= 0) {
                             info.presentationTimeUs = (encodedVideoFrames.toLong() * 1_000_000L) / fps
                             encodedVideoFrames++
-                            muxer.writeSampleData(muxerVideoTrack, buf, info)
+                            activeMuxer.writeSampleData(muxerVideoTrack, buf, info)
                         }
                     }
                 )
@@ -295,8 +296,8 @@ class AndroidMediaCodecRenderer(
                 fps = fps,
                 onFormatChanged = { fmt ->
                     if (!muxerStarted) {
-                        muxerVideoTrack = muxer.addTrack(fmt)
-                        muxer.start()
+                        muxerVideoTrack = activeMuxer.addTrack(fmt)
+                        activeMuxer.start()
                         muxerStarted = true
                     }
                 },
@@ -304,7 +305,7 @@ class AndroidMediaCodecRenderer(
                     if (muxerStarted && muxerVideoTrack >= 0) {
                         info.presentationTimeUs = (encodedVideoFrames.toLong() * 1_000_000L) / fps
                         encodedVideoFrames++
-                        muxer.writeSampleData(muxerVideoTrack, buf, info)
+                        activeMuxer.writeSampleData(muxerVideoTrack, buf, info)
                     }
                 }
             )
@@ -322,12 +323,12 @@ class AndroidMediaCodecRenderer(
                     val copyInfo = MediaCodec.BufferInfo().apply {
                         set(0, bytes.size, info.presentationTimeUs, info.flags)
                     }
-                    muxer.writeSampleData(muxerAudioTrack, tempByteBuf, copyInfo)
+                    activeMuxer.writeSampleData(muxerAudioTrack, tempByteBuf, copyInfo)
                 }
             }
 
-            muxer.stop()
-            muxer.release()
+            activeMuxer.stop()
+            activeMuxer.release()
             muxer = null
 
             // 6. Export MP4 to Tablet Gallery / Movies & Downloads
