@@ -152,7 +152,7 @@ data class TimelineVisualClip(
     val trimFromMs: Long,
     val trimToMs: Long,
     val playbackRate: Float,
-    val volume: Float, // 0f..1f
+    val volume: Float, // 0f..1.5f
     val opacity: Float, // 0f..1f
     val box: VisualBox,
     val borderRadiusPx: Float,
@@ -161,7 +161,13 @@ data class TimelineVisualClip(
     val flipX: Boolean,
     val flipY: Boolean,
     val brightness: Float, // 100 = normal
+    val contrast: Float = 100f, // 100 = normal
+    val saturate: Float = 100f, // 100 = normal
+    val sepia: Float = 0f, // 0..100
+    val grayscale: Float = 0f, // 0..100
     val blur: Float,
+    val blurFill: Boolean = false,
+    val cameraMotion: String = "none",
     val inTransition: TransitionSpec?,
     val outTransition: TransitionSpec?,
     val hasAudio: Boolean,
@@ -197,7 +203,9 @@ data class TimelineAudioClip(
     val trimFromMs: Long,
     val trimToMs: Long,
     val playbackRate: Float,
-    val volume: Float // 0f..1.5f
+    val volume: Float, // 0f..1.5f
+    val fadeIn: Boolean = false,
+    val fadeOut: Boolean = false
 )
 
 object MediaProbeUtils {

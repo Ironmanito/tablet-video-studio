@@ -509,26 +509,94 @@ class AndroidMediaCodecRenderer(
 
             if (bmp == null || bmp.width <= 1 || bmp.height <= 1) continue
 
-            // Compute fade / slide transitions
+            // Compute Pro Transitions & Camera Motions
             val clipDurSec = max(0.05f, (clip.displayToMs - clip.displayFromMs) / 1000f)
             val relSec = max(0f, (timeMs - clip.displayFromMs) / 1000f)
+            val clipProgress = (relSec / clipDurSec).coerceIn(0f, 1f)
             var alphaFactor = clip.opacity
+            var scaleFactor = 1f
+            var rotateDeg = 0f
+            var extraBrightness = 0f
 
             var offsetX = clip.box.finalX
             var offsetY = clip.box.finalY
+
+            // Camera continuous motions (Ken Burns / Pan / Shake)
+            when (clip.cameraMotion) {
+                "kenburns-in" -> scaleFactor *= (1f + 0.24f * clipProgress)
+                "kenburns-out" -> scaleFactor *= (1.26f - 0.26f * clipProgress)
+                "pan" -> {
+                    scaleFactor *= 1.16f
+                    offsetX += (-55f + 110f * clipProgress) * dims.scaleX
+                }
+                "shake" -> {
+                    if (relSec < 0.6f) {
+                        val p = (1f - relSec / 0.6f).coerceIn(0f, 1f)
+                        scaleFactor *= (1f + 0.3f * p)
+                        rotateDeg += -8f * p
+                    }
+                }
+            }
 
             clip.inTransition?.let { tr ->
                 val d = min(tr.durationSec, clipDurSec * 0.5f)
                 if (relSec < d && d > 0.01f) {
                     val progress = (relSec / d).coerceIn(0f, 1f)
-                    alphaFactor *= progress
-                    if (tr.kind == "slide" || tr.kind == "wipe") {
-                        val inv = 1f - progress
-                        when (tr.direction) {
-                            "from-right" -> offsetX += (dims.outW - offsetX) * inv
-                            "from-left" -> offsetX -= (offsetX + clip.box.finalW) * inv
-                            "from-bottom" -> offsetY += (dims.outH - offsetY) * inv
-                            "from-top" -> offsetY -= (offsetY + clip.box.finalH) * inv
+                    val inv = 1f - progress
+                    when (tr.kind) {
+                        "flash-white" -> {
+                            alphaFactor *= (0.15f + 0.85f * progress)
+                            extraBrightness += 180f * inv
+                            scaleFactor *= (1f + 0.08f * inv)
+                        }
+                        "dip-black" -> {
+                            alphaFactor *= progress
+                            extraBrightness -= 100f * inv
+                        }
+                        "zoom-punch" -> {
+                            alphaFactor *= progress
+                            scaleFactor *= (1f + 0.55f * inv)
+                        }
+                        "whip-left" -> {
+                            alphaFactor *= (0.2f + 0.8f * progress)
+                            offsetX += dims.outW * 0.65f * inv
+                        }
+                        "whip-right" -> {
+                            alphaFactor *= (0.2f + 0.8f * progress)
+                            offsetX -= dims.outW * 0.65f * inv
+                        }
+                        "slide-up" -> {
+                            alphaFactor *= progress
+                            offsetY += dims.outH * 0.45f * inv
+                        }
+                        "slide-down" -> {
+                            alphaFactor *= progress
+                            offsetY -= dims.outH * 0.45f * inv
+                        }
+                        "iris-pop" -> {
+                            alphaFactor *= progress
+                            scaleFactor *= (0.2f + 0.8f * progress)
+                        }
+                        "spin-3d" -> {
+                            alphaFactor *= progress
+                            scaleFactor *= (0.65f + 0.35f * progress)
+                            rotateDeg += -18f * inv
+                        }
+                        "blur-dissolve" -> {
+                            alphaFactor *= progress
+                            scaleFactor *= (1f + 0.14f * inv)
+                        }
+                        "slide", "wipe" -> {
+                            alphaFactor *= progress
+                            when (tr.direction) {
+                                "from-right" -> offsetX += (dims.outW - offsetX) * inv
+                                "from-left" -> offsetX -= (offsetX + clip.box.finalW) * inv
+                                "from-bottom" -> offsetY += (dims.outH - offsetY) * inv
+                                "from-top" -> offsetY -= (offsetY + clip.box.finalH) * inv
+                            }
+                        }
+                        else -> {
+                            alphaFactor *= progress
                         }
                     }
                 }
@@ -539,24 +607,126 @@ class AndroidMediaCodecRenderer(
                 val outStart = clipDurSec - d
                 if (relSec > outStart && d > 0.01f) {
                     val progress = ((clipDurSec - relSec) / d).coerceIn(0f, 1f)
-                    alphaFactor *= progress
+                    val inv = 1f - progress
+                    when (tr.kind) {
+                        "flash-white" -> {
+                            alphaFactor *= (0.15f + 0.85f * progress)
+                            extraBrightness += 180f * inv
+                        }
+                        "dip-black" -> {
+                            alphaFactor *= progress
+                            extraBrightness -= 100f * inv
+                        }
+                        "zoom-punch" -> {
+                            alphaFactor *= progress
+                            scaleFactor *= (1f - 0.28f * inv)
+                        }
+                        "whip-left" -> {
+                            alphaFactor *= (0.2f + 0.8f * progress)
+                            offsetX -= dims.outW * 0.65f * inv
+                        }
+                        "whip-right" -> {
+                            alphaFactor *= (0.2f + 0.8f * progress)
+                            offsetX += dims.outW * 0.65f * inv
+                        }
+                        "slide-up" -> {
+                            alphaFactor *= progress
+                            offsetY -= dims.outH * 0.45f * inv
+                        }
+                        "slide-down" -> {
+                            alphaFactor *= progress
+                            offsetY += dims.outH * 0.45f * inv
+                        }
+                        "iris-pop" -> {
+                            alphaFactor *= progress
+                            scaleFactor *= (1f + 0.35f * inv)
+                        }
+                        "spin-3d" -> {
+                            alphaFactor *= progress
+                            scaleFactor *= (1f - 0.35f * inv)
+                            rotateDeg += 18f * inv
+                        }
+                        else -> {
+                            alphaFactor *= progress
+                        }
+                    }
                 }
+            }
+
+            // Optional Blur Fill / Studio Backdrop behind clip so no empty black bars remain
+            if (clip.blurFill) {
+                val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
+                    alpha = (alphaFactor.coerceIn(0f, 1f) * 150f).roundToInt()
+                    val bgCm = ColorMatrix().apply { setSaturation(1.3f) }
+                    val scaleArr = floatArrayOf(
+                        0.45f, 0f, 0f, 0f, 0f,
+                        0f, 0.45f, 0f, 0f, 0f,
+                        0f, 0f, 0.52f, 0f, 0f,
+                        0f, 0f, 0f, 1f, 0f
+                    )
+                    bgCm.postConcat(ColorMatrix(scaleArr))
+                    colorFilter = ColorMatrixColorFilter(bgCm)
+                }
+                val coverScale = max(
+                    dims.outW.toFloat() / max(1, bmp.width).toFloat(),
+                    dims.outH.toFloat() / max(1, bmp.height).toFloat()
+                ) * 1.15f
+                val covW = bmp.width * coverScale
+                val covH = bmp.height * coverScale
+                val covRect = RectF(
+                    (dims.outW - covW) / 2f,
+                    (dims.outH - covH) / 2f,
+                    (dims.outW + covW) / 2f,
+                    (dims.outH + covH) / 2f
+                )
+                canvas.drawBitmap(bmp, Rect(0, 0, bmp.width, bmp.height), covRect, bgPaint)
             }
 
             bitmapPaint.alpha = (alphaFactor.coerceIn(0f, 1f) * 255f).roundToInt()
 
-            // Optional brightness adjustment
-            if (abs(clip.brightness - 100f) > 1f) {
-                val shift = ((clip.brightness - 100f) / 100f).coerceIn(-0.8f, 0.8f) * 255f
-                val cm = ColorMatrix(
+            // Combined Pro Color Grading Matrix (Brightness, Contrast, Saturation, Grayscale, Sepia)
+            val effBrightness = clip.brightness + extraBrightness
+            val hasColorFilter = abs(effBrightness - 100f) > 1f ||
+                abs(clip.contrast - 100f) > 1f ||
+                abs(clip.saturate - 100f) > 1f ||
+                clip.grayscale > 1f ||
+                clip.sepia > 1f
+
+            if (hasColorFilter) {
+                val masterCm = ColorMatrix()
+                val sat = if (clip.grayscale >= 90f) {
+                    0f
+                } else {
+                    (clip.saturate / 100f).coerceIn(0f, 3f)
+                }
+                masterCm.setSaturation(sat)
+
+                if (clip.sepia > 1f) {
+                    val s = (clip.sepia / 100f).coerceIn(0f, 1f)
+                    val sepiaMatrix = ColorMatrix(
+                        floatArrayOf(
+                            1f - 0.607f * s, 0.769f * s, 0.189f * s, 0f, 0f,
+                            0.349f * s, 1f - 0.314f * s, 0.168f * s, 0f, 0f,
+                            0.272f * s, 0.534f * s, 1f - 0.869f * s, 0f, 0f,
+                            0f, 0f, 0f, 1f, 0f
+                        )
+                    )
+                    masterCm.postConcat(sepiaMatrix)
+                }
+
+                val c = (clip.contrast / 100f).coerceIn(0.3f, 2.5f)
+                val bShift = ((effBrightness - 100f) / 100f).coerceIn(-0.95f, 1.8f) * 255f
+                val cTranslate = (1f - c) * 128f + bShift
+                val cbMatrix = ColorMatrix(
                     floatArrayOf(
-                        1f, 0f, 0f, 0f, shift,
-                        0f, 1f, 0f, 0f, shift,
-                        0f, 0f, 1f, 0f, shift,
+                        c, 0f, 0f, 0f, cTranslate,
+                        0f, c, 0f, 0f, cTranslate,
+                        0f, 0f, c, 0f, cTranslate,
                         0f, 0f, 0f, 1f, 0f
                     )
                 )
-                bitmapPaint.colorFilter = ColorMatrixColorFilter(cm)
+                masterCm.postConcat(cbMatrix)
+                bitmapPaint.colorFilter = ColorMatrixColorFilter(masterCm)
             } else {
                 bitmapPaint.colorFilter = null
             }
@@ -569,6 +739,12 @@ class AndroidMediaCodecRenderer(
             )
 
             canvas.save()
+            if (abs(scaleFactor - 1f) > 0.005f) {
+                canvas.scale(scaleFactor, scaleFactor, dstRect.centerX(), dstRect.centerY())
+            }
+            if (abs(rotateDeg) > 0.1f) {
+                canvas.rotate(rotateDeg, dstRect.centerX(), dstRect.centerY())
+            }
             if (clip.borderRadiusPx > 0.5f) {
                 val clipPath = Path().apply {
                     addRoundRect(dstRect, clip.borderRadiusPx, clip.borderRadiusPx, Path.Direction.CW)
@@ -811,6 +987,8 @@ class AndroidMediaCodecRenderer(
                     )
 
                     val isMain = baseItem?.optBoolean("isMain", false) == true
+                    val audioFadeIn = details.optBoolean("audioFadeIn", false)
+                    val audioFadeOut = details.optBoolean("audioFadeOut", false)
                     val vClip = TimelineVisualClip(
                         id = id,
                         type = type,
@@ -829,7 +1007,13 @@ class AndroidMediaCodecRenderer(
                         flipX = details.optBoolean("flipX", false),
                         flipY = details.optBoolean("flipY", false),
                         brightness = MediaProbeUtils.parsePixelOrNumber(details.opt("brightness"), 100f) ?: 100f,
+                        contrast = MediaProbeUtils.parsePixelOrNumber(details.opt("contrast"), 100f) ?: 100f,
+                        saturate = MediaProbeUtils.parsePixelOrNumber(details.opt("saturate"), 100f) ?: 100f,
+                        sepia = MediaProbeUtils.parsePixelOrNumber(details.opt("sepia"), 0f) ?: 0f,
+                        grayscale = MediaProbeUtils.parsePixelOrNumber(details.opt("grayscale"), 0f) ?: 0f,
                         blur = MediaProbeUtils.parsePixelOrNumber(details.opt("blur"), 0f) ?: 0f,
+                        blurFill = details.optBoolean("blurFill", false),
+                        cameraMotion = details.optString("cameraMotion", "none"),
                         inTransition = inTrans,
                         outTransition = outTrans,
                         hasAudio = probe.hasAudio,
@@ -848,7 +1032,9 @@ class AndroidMediaCodecRenderer(
                                 trimFromMs = trimFromMs,
                                 trimToMs = trimToMs,
                                 playbackRate = playbackRate,
-                                volume = normVol.coerceIn(0f, 1.5f)
+                                volume = normVol.coerceIn(0f, 1.5f),
+                                fadeIn = audioFadeIn,
+                                fadeOut = audioFadeOut
                             )
                         )
                     }
@@ -856,6 +1042,8 @@ class AndroidMediaCodecRenderer(
                 "audio" -> {
                     val src = details.optString("src", "")
                     val localFile = resolveMediaSourceToFile(src) ?: continue
+                    val audioFadeIn = details.optBoolean("audioFadeIn", false)
+                    val audioFadeOut = details.optBoolean("audioFadeOut", false)
                     if (normVol > 0.001f) {
                         audioClips.add(
                             TimelineAudioClip(
@@ -866,7 +1054,9 @@ class AndroidMediaCodecRenderer(
                                 trimFromMs = trimFromMs,
                                 trimToMs = trimToMs,
                                 playbackRate = playbackRate,
-                                volume = normVol.coerceIn(0f, 1.5f)
+                                volume = normVol.coerceIn(0f, 1.5f),
+                                fadeIn = audioFadeIn,
+                                fadeOut = audioFadeOut
                             )
                         )
                     }
@@ -1006,6 +1196,43 @@ class AndroidMediaCodecRenderer(
         var inTrans: TransitionSpec? = null
         var outTrans: TransitionSpec? = null
 
+        // 1. Check Pro Suite transition details stored directly on clip details
+        val detailKind = details.optString("transitionKind", "").trim()
+        val detailDur = details.optDouble("transitionDurationSec", 0.5).toFloat().coerceIn(0.15f, 2.5f)
+        val detailMode = details.optString("transitionMode", "both")
+        if (detailKind.isNotEmpty() && detailKind != "none" && !detailKind.startsWith("kenburns") && detailKind != "pan" && detailKind != "shake") {
+            if (detailMode == "both" || detailMode == "in") {
+                inTrans = TransitionSpec(detailKind, detailDur, "from-right")
+            }
+            if (detailMode == "both" || detailMode == "out") {
+                outTrans = TransitionSpec(detailKind, detailDur, "from-left")
+            }
+        }
+
+        // 2. Check animations object on item (ADD_ANIMATION payload)
+        val animObj = baseItem?.optJSONObject("animations") ?: detailItem?.optJSONObject("animations")
+        if (animObj != null) {
+            animObj.optJSONObject("in")?.let { inAnim ->
+                val name = inAnim.optString("name", "").trim()
+                if (name.isNotEmpty() && name != "none" && !name.startsWith("kenburns") && name != "pan" && name != "shake") {
+                    val compArr = inAnim.optJSONArray("composition")
+                    val frames = compArr?.optJSONObject(0)?.optInt("durationInFrames", 15) ?: 15
+                    val dur = (frames / 30f).coerceIn(0.15f, 2.5f)
+                    if (inTrans == null) inTrans = TransitionSpec(name, dur, "from-right")
+                }
+            }
+            animObj.optJSONObject("out")?.let { outAnim ->
+                val name = outAnim.optString("name", "").trim()
+                if (name.isNotEmpty() && name != "none" && !name.startsWith("kenburns") && name != "pan" && name != "shake") {
+                    val compArr = outAnim.optJSONArray("composition")
+                    val frames = compArr?.optJSONObject(0)?.optInt("durationInFrames", 15) ?: 15
+                    val dur = (frames / 30f).coerceIn(0.15f, 2.5f)
+                    if (outTrans == null) outTrans = TransitionSpec(name, dur, "from-left")
+                }
+            }
+        }
+
+        // 3. Check transitionsMap
         val tKeys = transitionsMap.keys()
         while (tKeys.hasNext()) {
             val k = tKeys.next()

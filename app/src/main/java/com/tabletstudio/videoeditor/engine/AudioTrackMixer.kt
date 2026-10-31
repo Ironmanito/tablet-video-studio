@@ -109,6 +109,7 @@ object AudioTrackMixer {
 
             var dstFrameCursor = dstStartFrame.toDouble()
             val vol = clip.volume.coerceIn(0f, 2f)
+            val fadeFrames = (SAMPLE_RATE * 0.8f).toInt().coerceAtLeast(1)
 
             while (!outputDone && !isCancelled()) {
                 if (!inputDone) {
@@ -170,9 +171,17 @@ object AudioTrackMixer {
                                 for (dFrame in startDst until min(endDst, dstMaxFrame)) {
                                     val mIdx = dFrame * 2
                                     if (mIdx + 1 < masterPcm.size) {
-                                        val mixedL = (masterPcm[mIdx].toInt() + (leftRaw * vol).roundToInt())
+                                        var env = 1f
+                                        if (clip.fadeIn && dFrame - dstStartFrame < fadeFrames) {
+                                            env *= ((dFrame - dstStartFrame).toFloat() / fadeFrames).coerceIn(0f, 1f)
+                                        }
+                                        if (clip.fadeOut && dstMaxFrame - dFrame < fadeFrames) {
+                                            env *= ((dstMaxFrame - dFrame).toFloat() / fadeFrames).coerceIn(0f, 1f)
+                                        }
+                                        val effVol = vol * env
+                                        val mixedL = (masterPcm[mIdx].toInt() + (leftRaw * effVol).roundToInt())
                                             .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
-                                        val mixedR = (masterPcm[mIdx + 1].toInt() + (rightRaw * vol).roundToInt())
+                                        val mixedR = (masterPcm[mIdx + 1].toInt() + (rightRaw * effVol).roundToInt())
                                             .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
                                         masterPcm[mIdx] = mixedL.toShort()
                                         masterPcm[mIdx + 1] = mixedR.toShort()
