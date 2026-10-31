@@ -17,3 +17,4 @@ download_apk.sh
 apk.zip
 extracted_apk/
 download_and_install.py
+download_artifact.py

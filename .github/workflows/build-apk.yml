@@ -51,14 +51,14 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main'
         with:
-          tag_name: v1.0.0
-          name: "Tablet Video Studio v1.0.0 (Android Autónomo)"
+          tag_name: latest
+          name: "Tablet Video Studio v1.1.0"
           body: |
-            ### 🎬 Tablet Video Studio v1.0.0 — APK Autónomo para Android
-            - **Sin dependencia de Termux:** Incluye toda la interfaz multipista de React Video Studio embebida y un servidor multimedia local + compositor Hardware `MediaCodec` (H.264 + AAC) integrado dentro del APK.
-            - **Línea de tiempo multipista:** Videos, imágenes, superposiciones PiP, cortes (*Split*), recortes (*Trim*) y velocidad de reproducción.
-            - **Capas de texto y audio:** Títulos con bordes/fondos redondeados, mezcla multipista de audio y grabación de voz en off.
-            - **Integración nativa con Android:** Selector de archivos nativo de la Galería, guardado directo en `Movies/TabletVideoStudio` y `Download`, y botón de compartir a TikTok/WhatsApp/Reels.
+            ### 🎬 Tablet Video Studio v1.1.0
+            - 100% Offline: Audios, SFX y videos locales de la tablet.
+            - Reproductor previo de audios con botón Play/Pausa.
+            - Visor adaptable dinámico en horizontal y vertical sin cortes.
+            - Streaming a disco anti-OOM crash.
           draft: false
           prerelease: false
           files: dist/TabletVideoStudio.apk
