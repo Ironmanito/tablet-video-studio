@@ -52,13 +52,12 @@ jobs:
         if: github.ref == 'refs/heads/main'
         with:
           tag_name: latest
-          name: "Tablet Video Studio v1.1.0"
+          name: "Tablet Video Studio v1.2.0"
           body: |
-            ### 🎬 Tablet Video Studio v1.1.0
-            - 100% Offline: Audios, SFX y videos locales de la tablet.
-            - Reproductor previo de audios con botón Play/Pausa.
-            - Visor adaptable dinámico en horizontal y vertical sin cortes.
-            - Streaming a disco anti-OOM crash.
+            ### 🎬 Tablet Video Studio v1.2.0
+            - Botón directo en el visor para cargar Proyecto Demo de Venta con Efectos Especiales sin renderizar.
+            - Pistas multipista de Video, PiP con bordes redondeados y sombra, Locución, SFX Whoosh/Pop/Ding, Música Lofi y Textos animados.
+            - Totalmente interactivo en el reproductor interno.
           draft: false
           prerelease: false
           files: dist/TabletVideoStudio.apk
