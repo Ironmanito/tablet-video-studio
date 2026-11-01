@@ -37,6 +37,11 @@ class LocalStudioServer(private val context: Context) {
 
     private val renderJobs = ConcurrentHashMap<String, RenderJob>()
     private val mediaMetaMap = ConcurrentHashMap<String, MediaItemMeta>()
+    private val pendingAgentCommands = java.util.Collections.synchronizedList(mutableListOf<JSONObject>())
+    @Volatile
+    private var latestAgentState: JSONObject = JSONObject()
+    @Volatile
+    var onAgentCommand: ((JSONObject) -> Boolean)? = null
     private val executor = Executors.newCachedThreadPool()
     private val renderer = AndroidMediaCodecRenderer(context, uploadsDir, cacheDir)
 
@@ -513,6 +518,63 @@ class LocalStudioServer(private val context: Context) {
                 inline = isInline
             )
             return
+        }
+
+        // 9b. POST /api/agent/command — Puente de Control IA en Vivo hacia la línea de tiempo
+        if (method == "POST" && path == "/api/agent/command") {
+            val contentLength = headers["content-length"]?.toIntOrNull() ?: 0
+            val rawBytes = readFixedBytes(input, contentLength)
+            val bodyStr = if (rawBytes.isNotEmpty()) String(rawBytes, Charsets.UTF_8) else "{}"
+            val cmdJson = JSONObject(bodyStr)
+            val deliveredDirect = try {
+                onAgentCommand?.invoke(cmdJson) ?: false
+            } catch (_: Throwable) {
+                false
+            }
+            if (!deliveredDirect) {
+                pendingAgentCommands.add(cmdJson)
+            }
+            val resp = JSONObject()
+                .put("ok", true)
+                .put("deliveredDirect", deliveredDirect)
+                .put("queuedCount", pendingAgentCommands.size)
+            sendJsonResponse(output, "200 OK", resp)
+            return
+        }
+
+        // 9c. GET /api/agent/poll — El WebView recoge comandos encolados
+        if (method == "GET" && path == "/api/agent/poll") {
+            val arr = JSONArray()
+            synchronized(pendingAgentCommands) {
+                for (c in pendingAgentCommands) {
+                    arr.put(c)
+                }
+                pendingAgentCommands.clear()
+            }
+            val resp = JSONObject()
+                .put("ok", true)
+                .put("commands", arr)
+            sendJsonResponse(output, "200 OK", resp)
+            return
+        }
+
+        // 9d. GET / POST /api/agent/state — Estado actual de la línea de tiempo en pantalla
+        if (path == "/api/agent/state") {
+            if (method == "POST") {
+                val contentLength = headers["content-length"]?.toIntOrNull() ?: 0
+                val rawBytes = readFixedBytes(input, contentLength)
+                if (rawBytes.isNotEmpty()) {
+                    latestAgentState = JSONObject(String(rawBytes, Charsets.UTF_8))
+                }
+                sendJsonResponse(output, "200 OK", JSONObject().put("ok", true))
+                return
+            } else if (method == "GET") {
+                val resp = JSONObject()
+                    .put("ok", true)
+                    .put("state", latestAgentState)
+                sendJsonResponse(output, "200 OK", resp)
+                return
+            }
         }
 
         // 10. Static SPA Assets from assets/webapp/

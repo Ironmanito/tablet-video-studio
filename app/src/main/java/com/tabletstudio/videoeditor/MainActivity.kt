@@ -8,6 +8,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.os.Looper
+import android.os.PowerManager
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.JavascriptInterface
@@ -41,6 +42,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var studioServer: LocalStudioServer
     private var activeWebView: WebView? = null
+    private var cpuWakeLock: PowerManager.WakeLock? = null
 
     private var fileUploadCallback: ValueCallback<Array<Uri>>? = null
     private var pendingWebPermissionRequest: PermissionRequest? = null
@@ -115,6 +117,33 @@ class MainActivity : AppCompatActivity() {
 
         activeWebView = binding.studioWebView
         studioServer = LocalStudioServer(applicationContext)
+        studioServer.onAgentCommand = { cmdJson ->
+            val wv = activeWebView
+            if (wv != null) {
+                val payloadLiteral = cmdJson.toString()
+                runOnUiThread {
+                    try {
+                        wv.evaluateJavascript(
+                            "if(window.StudioAgent&&window.StudioAgent.runCommand){window.StudioAgent.runCommand($payloadLiteral);}",
+                            null
+                        )
+                    } catch (_: Throwable) {}
+                }
+                true
+            } else {
+                false
+            }
+        }
+        try {
+            val pm = getSystemService(POWER_SERVICE) as? PowerManager
+            cpuWakeLock = pm?.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "TabletVideoStudio::AgentServerLock"
+            )?.apply {
+                setReferenceCounted(false)
+                acquire(4 * 60 * 60 * 1000L)
+            }
+        } catch (_: Throwable) {}
         setupNativeTopBar()
         setupWebView(activeWebView!!)
         setupBackNavigation()
@@ -514,6 +543,11 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        try {
+            if (cpuWakeLock?.isHeld == true) {
+                cpuWakeLock?.release()
+            }
+        } catch (_: Throwable) {}
         studioServer.stopServer()
     }
 
